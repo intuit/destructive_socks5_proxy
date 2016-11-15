@@ -4,6 +4,43 @@ Utilizes the [Socks5 proxy protocol](https://www.ietf.org/rfc/rfc1928.txt) to pr
 
 In addition to providing proxy functionality, the destructive proxy is able to inject latency around network calls and shutdown connections by hostname.
 
+### How Build From Source
+* Install latest GO version (https://golang.org/dl). 
+  * The following steps assume GO is installed to __/usr/local/go__ (refer to GO_HOME below)
+* edit ___.bash_profile___ and add these lines:
+```bash
+export GOPATH=~/GOWorkspace
+export GO_HOME=/usr/local/go 
+export PATH=$PATH:$GO_HOME/bin:$GOPATH/bin
+```
+* __Run these commands__:
+```bash
+go get github.com/intuit/destructive_socks5_proxy
+go get -u golang.org/x/net/proxy
+go get github.com/Unknwon/macaron
+cd ~/GOWorkspace/src/github.com/intuit/destructive_socks5_proxy
+./test_with_coverage.sh
+```
+* __Expected output__:
+```bash
+....
+PASS
+coverage: 93.6% of statements
+ok      github.com/intuit/destructive_socks5_proxy  
+```
+* __Now run these commands__:
+```bash
+   cd destructive_socks5_proxy
+   ./build.sh
+   ls *
+```
+* __Expected output__:
+```bash
+.... 
+destructive_socks5_proxy_darwin_amd64
+destructive_socks5_proxy_linux_amd64
+destructive_socks5_proxy_windows_amd64.exe
+```
 
 ### Usage
 
