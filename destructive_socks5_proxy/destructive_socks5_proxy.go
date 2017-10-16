@@ -177,7 +177,7 @@ func main() {
 	//metrics
 	app.Get("/counters", func(ctx *macaron.Context) {
 		var _counters map[string]float64
-		dsp.Locker(dsp.CountersSync, func() {
+		dsp.RW_Locker(dsp.CountersSync, func() {
 			_counters = dsp.Counters
 		})
 		ctx.JSON(200, _counters)
@@ -185,7 +185,7 @@ func main() {
 
 	app.Get("/dependencies", func(ctx *macaron.Context) {
 		var hosts = make([]string, 0)
-		dsp.Locker(dsp.CountersSync, func() {
+		dsp.RW_Locker(dsp.CountersSync, func() {
 			for key, _ := range dsp.Counters {
 				if strings.Contains(key, "writes") && strings.Contains(key, "Out") {
 					hosts = append(hosts, strings.Split(strings.Split(key, ";")[1], ":")[0])
@@ -197,7 +197,7 @@ func main() {
 
 	//metrics
 	app.Get("/counters/reset", func(ctx *macaron.Context) {
-		dsp.Locker(dsp.CountersSync, func() {
+		dsp.RW_Locker(dsp.CountersSync, func() {
 			dsp.Counters = make(map[string]float64)
 		})
 		ctx.JSON(200, "reset counters")

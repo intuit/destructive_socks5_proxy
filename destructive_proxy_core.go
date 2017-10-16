@@ -25,7 +25,7 @@ func read_locker(locker sync.RWMutex, fn func()) {
 	fn()
 	locker.RUnlock()
 }
-func Locker(locker sync.RWMutex, fn func()) {
+func RW_Locker(locker sync.RWMutex, fn func()) {
 	locker.Lock()
 	fn()
 	locker.Unlock()
@@ -42,12 +42,24 @@ var (
 func (c Counter) Inc() { c.Add(1) }
 func (c Counter) Dec() { c.Add(-1) }
 func (c Counter) Add(v float64) {
-	Locker(CountersSync, func() {
-		if _, exists := Counters[string(c)]; !exists {
-			Counters[string(c)] += 0
-		}
-		Counters[string(c)] += v
-	})
+	exists := false
+	CountersSync.RLock()
+	_, exists = Counters[string(c)]
+	CountersSync.RUnlock()
+	if !exists {
+		CountersSync.Lock()
+		Counters[string(c)] += 0
+		CountersSync.Unlock()
+	}
+	CountersSync.Lock()
+	Counters[string(c)] += v
+	CountersSync.Unlock()
+
+	// 	if _, exists := Counters[string(c)]; !exists {
+	// 		Counters[string(c)] += 0
+	// 	}
+	// 	Counters[string(c)] += v
+	// })
 }
 
 func init() {
@@ -115,7 +127,7 @@ func NewListenerForTcpCopyingProxy(addr string) {
 			defer Counter(ACTIVE_CONNS).Dec()
 
 			//sleep if remote ip exists in hostToSleepPerRemoteConnect
-			read_locker(HostToSleepPerRemoteConnectSync, func() {
+			RW_Locker(HostToSleepPerRemoteConnectSync, func() {
 				host := remote_addr.IP.String()
 				latencyAndCount, exists := HostToSleepPerRemoteConnect[host]
 				if !exists {
@@ -147,7 +159,7 @@ func NewListenerForTcpCopyingProxy(addr string) {
 			go func(dst net.Conn, src net.Conn) {
 				data := make([]byte, 32*1024)
 				for {
-					read_locker(HostToSleepPerRemoteReadSync, func() {
+					RW_Locker(HostToSleepPerRemoteReadSync, func() {
 						host := remote_addr.IP.String()
 						latencyAndCount, exists := HostToSleepPerRemoteRead[host]
 						gou.Infof("remote_addr %v", remote_addr)
@@ -204,7 +216,7 @@ func NewListenerForTcpCopyingProxy(addr string) {
 
 					if Blacklist {
 						closed := false
-						read_locker(hostToCloseSync, func() {
+						RW_Locker(hostToCloseSync, func() {
 							_, fqdn_exists := HostToClose[remote_addr.IP.String()]
 							_, proxy_exists := HostToClose[remote_addr.ProxyHost]
 
@@ -226,7 +238,7 @@ func NewListenerForTcpCopyingProxy(addr string) {
 
 					if Whitelist {
 						closed := false
-						read_locker(hostToAllowSync, func() {
+						RW_Locker(hostToAllowSync, func() {
 							_, fqdn_exists := HostToAllow[remote_addr.IP.String()]
 							_, proxy_exists := HostToAllow[remote_addr.ProxyHost]
 
@@ -246,7 +258,7 @@ func NewListenerForTcpCopyingProxy(addr string) {
 						}
 					}
 
-					read_locker(HostToSleepPerRemoteWriteSync, func() {
+					RW_Locker(HostToSleepPerRemoteWriteSync, func() {
 						host := remote_addr.IP.String()
 						latencyAndCount, exists := HostToSleepPerRemoteWrite[host]
 						gou.Infof("remote_addr %v", remote_addr)
@@ -331,7 +343,7 @@ func SetLatencyForHost(host, _type string, latency time.Duration, count int) (st
 
 	switch _type {
 	case PER_REMOTE_WRITE:
-		Locker(HostToSleepPerRemoteWriteSync, func() {
+		RW_Locker(HostToSleepPerRemoteWriteSync, func() {
 			if latency > 0 {
 				HostToSleepPerRemoteWrite[_resolved_ip] = LatencyAndCountStruct{latency, count}
 			} else {
@@ -339,7 +351,7 @@ func SetLatencyForHost(host, _type string, latency time.Duration, count int) (st
 			}
 		})
 	case PER_REMOTE_READ:
-		Locker(HostToSleepPerRemoteReadSync, func() {
+		RW_Locker(HostToSleepPerRemoteReadSync, func() {
 			if latency > 0 {
 				HostToSleepPerRemoteRead[_resolved_ip] = LatencyAndCountStruct{latency, count}
 			} else {
@@ -347,7 +359,7 @@ func SetLatencyForHost(host, _type string, latency time.Duration, count int) (st
 			}
 		})
 	case PER_REMOTE_CONNECT:
-		Locker(HostToSleepPerRemoteConnectSync, func() {
+		RW_Locker(HostToSleepPerRemoteConnectSync, func() {
 			if latency > 0 {
 				HostToSleepPerRemoteConnect[_resolved_ip] = LatencyAndCountStruct{latency, count}
 			} else {
@@ -371,7 +383,7 @@ func SetBlacklistForHost(host string, add bool) (string, error) {
 
 	_resolved_ip := ip.String()
 
-	Locker(hostToCloseSync, func() {
+	RW_Locker(hostToCloseSync, func() {
 		if add {
 			HostToClose[_resolved_ip] = add
 		} else {
@@ -394,7 +406,7 @@ func SetWhitelistForHost(host string, add bool) (string, error) {
 
 	_resolved_ip := ip.String()
 
-	Locker(hostToAllowSync, func() {
+	RW_Locker(hostToAllowSync, func() {
 		if add {
 			HostToAllow[_resolved_ip] = add
 		} else {
@@ -413,15 +425,15 @@ func GetLatencyForHost(host, _type string) (string, LatencyAndCountStruct, bool,
 	latencyAndCount, exists := LatencyAndCountStruct{time.Duration(0), -1}, false
 	switch _type {
 	case PER_REMOTE_WRITE:
-		read_locker(HostToSleepPerRemoteWriteSync, func() {
+		RW_Locker(HostToSleepPerRemoteWriteSync, func() {
 			latencyAndCount, exists = HostToSleepPerRemoteWrite[ip.String()]
 		})
 	case PER_REMOTE_READ:
-		read_locker(HostToSleepPerRemoteReadSync, func() {
+		RW_Locker(HostToSleepPerRemoteReadSync, func() {
 			latencyAndCount, exists = HostToSleepPerRemoteRead[ip.String()]
 		})
 	case PER_REMOTE_CONNECT:
-		read_locker(HostToSleepPerRemoteConnectSync, func() {
+		RW_Locker(HostToSleepPerRemoteConnectSync, func() {
 			latencyAndCount, exists = HostToSleepPerRemoteConnect[ip.String()]
 		})
 	}
